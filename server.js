@@ -1,8 +1,11 @@
-import express from "express";
-import fetch from "node-fetch";
+const express = require("express");
+const fetch = require("node-fetch");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 👉 Gắn link API gốc của bạn ở đây
+const API_URL = "https://api.wsktnus8.net/v2/history/getLastResult?gameId=ktrng_3979&size=100&tableId=39791215743193&curPage=1";
 
 let latestResult = null;
 
@@ -67,8 +70,7 @@ function parseData(json) {
 // ===== Hàm fetch API gốc =====
 async function fetchAPI() {
   try {
-    // 👉 Thay link API gốc thật của bạn vào đây
-    const res = await fetch("https://api.wsktnus8.net/v2/history/getLastResult?gameId=ktrng_3979&size=100&tableId=39791215743193&curPage=1");
+    const res = await fetch(API_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
 
