@@ -1,5 +1,4 @@
-const express = require("express");
-const fetch = require("node-fetch");
+import express from "express";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,7 +33,7 @@ function parseData(json) {
       Xuc_xac_2: d2,
       Xuc_xac_3: d3,
       Tong: d1 + d2 + d3,
-      Ket_qua: getKetQua(d1, d2, d3)
+      Ket_qua: getKetQua(d1, d2, d3),
     };
   }
 
@@ -47,7 +46,7 @@ function parseData(json) {
       Xuc_xac_2: d2,
       Xuc_xac_3: d3,
       Tong: d1 + d2 + d3,
-      Ket_qua: getKetQua(d1, d2, d3)
+      Ket_qua: getKetQua(d1, d2, d3),
     };
   }
 
@@ -60,7 +59,7 @@ function parseData(json) {
       Xuc_xac_2: d2,
       Xuc_xac_3: d3,
       Tong: d1 + d2 + d3,
-      Ket_qua: getKetQua(d1, d2, d3)
+      Ket_qua: getKetQua(d1, d2, d3),
     };
   }
 
