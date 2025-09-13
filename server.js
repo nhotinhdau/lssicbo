@@ -1,73 +1,101 @@
-// Định nghĩa URL của cơ sở dữ liệu Firebase Realtime Database
-var dbUrl = "https://data-real-time-68gb-default-rtdb.asia-southeast1.firebasedatabase.app";
+import express from "express";
+import fetch from "node-fetch";
 
-(function () {
-  // Lưu trữ tham chiếu đến đối tượng WebSocket gốc của trình duyệt
-  var OriginalWebSocket = window.WebSocket;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  // Ghi đè hàm WebSocket để thêm logic xử lý tùy chỉnh
-  window.WebSocket = function (url, protocols) {
-    // Tạo đối tượng WebSocket mới, hỗ trợ cả trường hợp có và không có protocols
-    var ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
+let latestResult = null;
 
-    // Thêm sự kiện lắng nghe khi nhận được tin nhắn từ WebSocket
-    ws.addEventListener("message", function (event) {
-      try {
-        var text;
-        // Kiểm tra kiểu dữ liệu của tin nhắn nhận được
-        if (event.data instanceof ArrayBuffer) {
-          // Nếu dữ liệu là ArrayBuffer, chuyển đổi sang chuỗi UTF-8
-          text = new TextDecoder("utf-8").decode(event.data);
-        } else if (typeof event.data === "string") {
-          // Nếu dữ liệu đã là chuỗi, sử dụng trực tiếp
-          text = event.data;
-        } else {
-          // Nếu dữ liệu không thuộc kiểu hỗ trợ, thoát khỏi hàm
-          return;
-        }
+// ===== Hàm tính kết quả =====
+function getKetQua(d1, d2, d3) {
+  // Nếu 3 xúc xắc bằng nhau → Bão
+  if (d1 === d2 && d2 === d3) return "Bão";
 
-        // Lấy độ dài của chuỗi dữ liệu
-        var len = text.length;
-        // Kiểm tra xem tin nhắn có chứa "mnmdsbgamestart" hoặc "mnmdsbgameend"
-        if (text.indexOf("mnmdsbgamestart") !== -1 || text.indexOf("mnmdsbgameend") !== -1) {
-          // Xác định loại phiên: "start" (bắt đầu) hoặc "end" (kết thúc)
-          var sessionType = text.indexOf("mnmdsbgamestart") !== -1 ? "start" : "end";
-          // In thông tin phiên ra console (START hoặc END)
-          console.log("📥 PHIÊN " + sessionType.toUpperCase() + ":", text);
+  const tong = d1 + d2 + d3;
+  if (tong >= 4 && tong <= 10) return "Xỉu";
+  if (tong >= 11 && tong <= 17) return "Tài";
 
-          // Tạo payload JSON để gửi lên Firebase
-          var payload = JSON.stringify({
-            time: new Date().toISOString(), // Thời gian hiện tại (định dạng ISO)
-            type: sessionType, // Loại phiên (start/end)
-            data: text, // Dữ liệu tin nhắn
-            length: len, // Độ dài của tin nhắn
-          });
+  return "Không xác định";
+}
 
-          // Gửi dữ liệu lên Firebase Realtime Database
-          fetch(dbUrl + "/taixiu_sessions.json", {
-            method: "POST", // Phương thức POST để thêm dữ liệu
-            headers: { "Content-Type": "application/json" }, // Định dạng JSON
-            body: payload, // Nội dung dữ liệu gửi đi
-          }).then(function (res) {
-            if (res.ok) {
-              // Nếu lưu thành công, thông báo ra console
-              console.log("✅ Đã lưu phiên " + sessionType.toUpperCase() + " vào Firebase");
-            } else {
-              // Nếu lưu thất bại, thông báo lỗi và mã trạng thái
-              console.error("❌ Lỗi lưu phiên " + sessionType.toUpperCase() + ":", res.status);
-            }
-          });
-        }
-      } catch (err) {
-        // Xử lý lỗi nếu có vấn đề khi phân tích dữ liệu WebSocket
-        console.error("❌ Lỗi khi xử lý WebSocket:", err);
-      }
-    });
+// ===== Hàm chuẩn hóa dữ liệu từ API gốc =====
+function parseData(json) {
+  // --- Format 1: SessionId + FirstDice ---
+  if (json?.SessionId && json.FirstDice !== undefined) {
+    const d1 = json.FirstDice;
+    const d2 = json.SecondDice;
+    const d3 = json.ThirdDice;
+    return {
+      Phien: json.SessionId,
+      Xuc_xac_1: d1,
+      Xuc_xac_2: d2,
+      Xuc_xac_3: d3,
+      Tong: d1 + d2 + d3,
+      Ket_qua: getKetQua(d1, d2, d3)
+    };
+  }
 
-    // Trả về đối tượng WebSocket để duy trì chức năng gốc
-    return ws;
-  };
+  // --- Format 2: gameNum + facesList ---
+  if (json?.gameNum && Array.isArray(json.facesList)) {
+    const [d1, d2, d3] = json.facesList;
+    return {
+      Phien: json.gameNum.replace("#", ""),
+      Xuc_xac_1: d1,
+      Xuc_xac_2: d2,
+      Xuc_xac_3: d3,
+      Tong: d1 + d2 + d3,
+      Ket_qua: getKetQua(d1, d2, d3)
+    };
+  }
 
-  // Đảm bảo prototype của WebSocket tùy chỉnh giống với WebSocket gốc
-  window.WebSocket.prototype = OriginalWebSocket.prototype;
-})();
+  // --- Format 3: Result.OpenCode ---
+  if (json?.Result?.OpenCode) {
+    const [d1, d2, d3] = json.Result.OpenCode.split(",").map(Number);
+    return {
+      Phien: json.Result.Issue || "N/A",
+      Xuc_xac_1: d1,
+      Xuc_xac_2: d2,
+      Xuc_xac_3: d3,
+      Tong: d1 + d2 + d3,
+      Ket_qua: getKetQua(d1, d2, d3)
+    };
+  }
+
+  return null;
+}
+
+// ===== Hàm fetch API gốc =====
+async function fetchAPI() {
+  try {
+    // 👉 Thay link API gốc thật của bạn vào đây
+    const res = await fetch("https://api.wsktnus8.net/v2/history/getLastResult?gameId=ktrng_3979&size=100&tableId=39791215743193&curPage=1");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+
+    const parsed = parseData(json);
+    if (parsed) {
+      latestResult = parsed;
+      console.log("✅ Phiên mới:", parsed);
+    } else {
+      console.log("⚠️ Không parse được:", json);
+    }
+  } catch (err) {
+    console.error("❌ Lỗi fetch API:", err.message);
+  }
+}
+
+// ===== REST API public =====
+app.get("/api/taixiu/ws", (req, res) => {
+  if (latestResult) {
+    res.json(latestResult);
+  } else {
+    res.status(503).json({ error: "Chưa có dữ liệu" });
+  }
+});
+
+// ===== Chạy định kỳ 3s fetch 1 lần =====
+setInterval(fetchAPI, 3000);
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server chạy tại http://localhost:${PORT}`);
+});
